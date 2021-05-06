@@ -53,6 +53,10 @@ ggplot(
 ) + 
 geom_histogram(alpha = 0.8,)
 
+t.test(
+  ideb_gestores %>% filter(IN_MESTRADO==0) %>% pull(nota_matematica),
+  ideb_gestores %>% filter(IN_MESTRADO==1) %>% pull(nota_matematica)
+)
 # nota de portugues por IN_MESTRADO --------------------------
 psych::describeBy(
   x = ideb_gestores$nota_portugues,
