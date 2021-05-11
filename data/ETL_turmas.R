@@ -20,10 +20,7 @@ turmas_raw <- arrow::read_parquet(
 # criando variavel numero médio de alunos por turma
 turmas <- turmas_raw %>% 
   group_by(CO_ENTIDADE) %>% 
-  summarise(
-    #media_alunos_por_turma=mean(QT_MATRICULAS),
-    media_alunos_por_turma=round(mean(QT_MATRICULAS)),
-    )
+  summarise(media_alunos_por_turma=round(mean(QT_MATRICULAS)))
 
 # gravando arquivo no disco
 save(turmas, file ="./data/tidy/turmas.rda")

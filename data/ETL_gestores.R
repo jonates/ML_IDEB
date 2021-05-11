@@ -32,6 +32,13 @@ vetor_atributos_gestores <- c(
   'CO_ENTIDADE'
 )
 
+# criar dummy pdc com ao nenos uma das deficiencias
+# criar dummy escolaridade superior
+# criar dummy cor negro (pretos e pardos)
+# tirar dummy
+# tirar acesso ao cargo
+# tirar tipo de contratacao
+
 # carregando o dataset
 gestores_raw <- arrow::read_parquet(
   file = "./data/raw/GESTOR.parquet",
@@ -54,7 +61,7 @@ diretores <- diretores %>% filter(n_diretores_escola<2)
 
 # carregando os codigos das escolas do dataset escolas
 escolas <- idebr::censo_escolar_2019_escolas %>% 
-  select(id_escola, cod_regiao, TP_SITUACAO_FUNCIONAMENTO)
+  select(id_escola, TP_SITUACAO_FUNCIONAMENTO)
 
 # selecionando somente as escolas ativas
 escolas_ativas <- escolas %>% filter(TP_SITUACAO_FUNCIONAMENTO==1)
