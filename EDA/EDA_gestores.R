@@ -12,7 +12,11 @@ gestores <- gestores %>% arrange(gestores$id_escola) %>% mutate(id_escola = as.c
 # carregando o dataset de ideb
 ideb_medio <-idebr::ideb_ensino_medio_escolas %>% 
   filter(ano==2019) %>% 
-  mutate(etapa = 'medio')
+  mutate(etapa = 'medio') %>%
+  mutate(
+    cat_matematica = ifelse(nota_matematica<325,0,1),
+    cat_portugues = ifelse(nota_portugues<300,0,1)
+  )
 
 ideb_sf <- idebr::ideb_fundamental_finais_escolas %>% 
   filter(ano==2019) %>% 

@@ -13,9 +13,29 @@ turmas <- turmas %>%
 # montando o dataset ideb 2019 por escola ------------------------------------------
 
 # carregando o dataset de ideb
-ideb_medio <-idebr::ideb_ensino_medio_escolas %>% filter(ano==2019)
-ideb_sf <- idebr::ideb_fundamental_finais_escolas %>% filter(ano==2019)
-ideb_si <- idebr::ideb_fundamental_iniciais_escolas %>% filter(ano==2019)
+ideb_medio <-idebr::ideb_ensino_medio_escolas %>% 
+  filter(ano==2019) %>% 
+  mutate(etapa = 'medio') %>%
+  mutate(
+    cat_matematica = ifelse(nota_matematica<325,0,1),
+    cat_portugues = ifelse(nota_portugues<300,0,1)
+  )
+
+ideb_sf <- idebr::ideb_fundamental_finais_escolas %>% 
+  filter(ano==2019) %>% 
+  mutate(etapa = 'sf') %>%
+  mutate(
+    cat_matematica = ifelse(nota_matematica<300,0,1),
+    cat_portugues = ifelse(nota_portugues<275,0,1)
+  )
+
+ideb_si <- idebr::ideb_fundamental_iniciais_escolas %>% 
+  filter(ano==2019) %>% 
+  mutate(etapa = 'si') %>%
+  mutate(
+    cat_matematica = ifelse(nota_matematica<225,0,1),
+    cat_portugues = ifelse(nota_portugues<200,0,1)
+  )
 
 # juntando os dataset do ideb 2019
 ideb_2019 <- ideb_si %>% 
@@ -35,12 +55,126 @@ ideb_turmas <- ideb_turmas %>%
   mutate(
     nota_matematica = as.numeric(stringr::str_replace(nota_matematica,",",".")),
     nota_portugues = as.numeric(stringr::str_replace(nota_portugues,",",".")),
-    nota_media = as.numeric(stringr::str_replace(nota_media,",","."))
+    nota_media = as.numeric(stringr::str_replace(nota_media,",",".")),
+    cat_tamanho_turma = ifelse(media_alunos_por_turma<=22,0,1)
   )
 
 # retirando os na's
 ideb_turmas <- ideb_turmas %>% filter(!is.na(media_alunos_por_turma))
-  
+
+# retirando escolas privadas
+ideb_turmas <- ideb_turmas %>% filter(rede != 'Privada')
+
+# retirando escolas ensino medio
+#ideb_turmas <- ideb_turmas %>% filter(etapa != 'medio')
+
+#tabela etapa de ensino x target
+
+gmodels::CrossTable(
+  ideb_turmas$etapa,
+  ideb_turmas$cat_matematica,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("etapa de ensino", "Aprendizado de matemática adequado"),
+  format = "SPSS"
+)
+
+gmodels::CrossTable(
+  ideb_turmas$etapa,
+  ideb_turmas$cat_portugues,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("etapa de ensino", "Aprendizado de portugues adequado"),
+  format = "SPSS"
+) 
+
+#tabela rede x target
+
+gmodels::CrossTable(
+  ideb_turmas$rede,
+  ideb_turmas$cat_matematica,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("rede de ensino", "Aprendizado de matemática adequado"),
+  format = "SPSS"
+)
+
+gmodels::CrossTable(
+  ideb_turmas$rede,
+  ideb_turmas$cat_portugues,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("rede de ensino", "Aprendizado de portugues adequado"),
+  format = "SPSS"
+)  
+
+#tabela UF x target
+
+gmodels::CrossTable(
+  ideb_turmas$sigla_uf,
+  ideb_turmas$cat_matematica,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("etapa de ensino", "Aprendizado de matemática adequado"),
+  format = "SPSS"
+)
+
+gmodels::CrossTable(
+  ideb_turmas$sigla_uf,
+  ideb_turmas$cat_portugues,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("etapa de ensino", "Aprendizado de portugues adequado"),
+  format = "SPSS"
+) 
+
+
+#tabela tamanho de turma x target
+
+gmodels::CrossTable(
+  ideb_turmas$cat_tamanho_turma,
+  ideb_turmas$cat_matematica,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("turma <= 22", "Aprendizado de matemática adequado"),
+  format = "SPSS"
+)
+
+gmodels::CrossTable(
+  ideb_turmas$cat_tamanho_turma,
+  ideb_turmas$cat_portugues,
+  expected=F,
+  chisq = T,
+  prop.r = T,
+  prop.c = T,
+  fisher = F,
+  dnn = c("turma <= 22", "Aprendizado de portugues adequado"),
+  format = "SPSS"
+)
+
+
+
 # Descritiva do numero medio de alunos por turma
 summary(ideb_turmas$media_alunos_por_turma)
 boxplot(ideb_turmas$media_alunos_por_turma)
@@ -50,7 +184,20 @@ plot(
   xlim = c(0,50)
 )
 
+# modelo linear entre media de alunos e notas
 lm(ideb_turmas$nota_matematica ~ ideb_turmas$media_alunos_por_turma)
+lm(ideb_turmas$nota_portugues ~ ideb_turmas$media_alunos_por_turma)
+
+# media de alunos por turma de acordo com o desempenho
+psych::describeBy(ideb_turmas$media_alunos_por_turma,ideb_turmas$cat_matematica)
+psych::describeBy(ideb_turmas$media_alunos_por_turma,ideb_turmas$cat_portugues)
+
+# teste para diferenca de media entre desempenhos
+t.test(
+  ideb_turmas %>% filter(cat_matematica==0) %>% pull(media_alunos_por_turma),
+  ideb_turmas %>% filter(cat_matematica==1) %>% pull(media_alunos_por_turma)
+)
+
 
 # nota de matematica por IN_MESTRADO --------------------------
 psych::describeBy(xlim = 
