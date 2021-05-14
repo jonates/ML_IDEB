@@ -1,0 +1,181 @@
+---
+title: "Trabalho Final - MATE33 - Classificar Aprendizado de matemática adequado com DT"
+author: c("Jonatas Silva do Espirito Santo","Rodrigo Barbosa de Cerqueira")
+date: "13/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse) 
+library(tidymodels)
+library(janitor)
+library(skimr)
+library(rpart)
+```
+
+## R Markdown
+
+
+```{r ideb}
+load("escolas2ML.rda") 
+
+ideb <- escolas2ML %>% 
+  mutate(
+    cod_regiao = as.factor(cod_regiao),
+    etapa = as.factor(etapa),
+    TP_DEPENDENCIA = as.factor(TP_DEPENDENCIA),
+    TP_LOCALIZACAO = as.factor(TP_LOCALIZACAO),
+    IN_BIBLIOTECA = as.factor(IN_BIBLIOTECA),
+    IN_COMPUTADOR = as.factor(IN_COMPUTADOR),
+    IN_LABORATORIO_INFORMATICA = as.factor(IN_LABORATORIO_INFORMATICA),
+    IN_ALIMENTACAO = as.factor(IN_ALIMENTACAO),
+    cat_portugues = as.factor(cat_portugues),
+    cat_matematica = as.factor(cat_matematica)
+  ) %>% 
+  select(-(cat_portugues))
+
+rm(escolas2ML)
+
+glimpse(ideb)
+
+ideb %>% count(cat_matematica)
+```
+
+## Bases Treino/Teste
+
+```{r}
+set.seed(16032018)
+ideb_initial_split <- initial_split(ideb, strata = "cat_matematica", p = 0.90)
+ideb_train <- training(ideb_initial_split)
+ideb_test <- testing(ideb_initial_split)
+# base de treino
+ideb_train %>% janitor::tabyl(cat_matematica)
+# base de teste
+ideb_test %>% janitor::tabyl(cat_matematica)
+```
+
+## Exploratória da base de treino antes do dataprep
+
+```{r}
+### Por fazer!
+skim(ideb_train)
+janitor::tabyl(ideb_train$cod_regiao)
+```
+
+## Pré-processamento
+
+```{r}
+ideb_receita <- recipe(cat_matematica ~ ., data = ideb_train) %>%
+  #step_rm(id_escola, skip = TRUE) # remover a coluna id
+  #step_modeimpute(var_com_missing) %>% #imputar missing pela moda
+  #step_medianimpute(all_numeric()) %>% #imputar missing pela mediana
+  #step_center(all_numeric()) %>% #subtrair da media 
+  #step_scale(all_numeric()) %>%  # dividir pelo desvio
+  step_zv(all_predictors()) %>% # retira preditoras que tem valores unicos
+  step_novel(all_nominal(), -all_outcomes()) %>% #se aparecer valor novo atribui um nivel de fator
+  step_dummy(cod_regiao,etapa,TP_DEPENDENCIA) #%>%  #transformar variaveis categoricas em dummy
+  #step_num2factor(all_numeric())
+  
+
+```
+
+
+## Exploratória da base de treino depois do dataprep
+
+```{r}
+skim(juice(prep(ideb_receita)))
+```
+
+## Arvore Decisao
+
+```{r}
+
+# PASSO 4) MODELO ----------------------------------------------------------
+# Defina um modelo de árvore de decisão para regressão usando rpart e 
+# prepare para tunar os hiperparâmetros cost_complexity e min_n. 
+# Deixe o tree_depth fixo em 10.
+# use as funções decision_tree(), tune(), set_engine() e set_mode().
+ideb_dt_model <- decision_tree(
+  cost_complexity = tune(),
+  min_n = tune(), 
+  tree_depth = tune()
+) %>% 
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+# workflow ----------------------------------------------------------------
+ideb_wf <- workflow() %>%
+  add_model(ideb_dt_model) %>%
+  add_recipe(ideb_receita)
+
+# PASSO 5) TUNAGEM DE HIPERPARÂMETROS --------------------------------------
+# bases de reamostragem para validação: vfold_cv()
+ideb_resamples <- vfold_cv(ideb_train, v = 5)
+
+# tunagem de hiperparametros 
+ideb_dt_tune_grid <- tune_grid(
+  ideb_wf,
+  resamples = ideb_resamples,
+  grid = 10,
+  metrics = metric_set(accuracy,roc_auc),
+  control = control_grid(verbose = TRUE, allow_par = FALSE)
+)
+
+# PASSO 6) DESEMPENHO DO MODELO FINAL ------------------------------------------
+# a) extrai melhor modelo com select_best()
+
+ideb_dt_best_params <- select_best(ideb_dt_tune_grid, "roc_auc")
+
+# b) finaliza o modelo inicial com finalize_model()
+
+ideb_wf <- ideb_wf %>% finalize_workflow(ideb_dt_best_params)
+
+# c) ajusta o modelo final com todos os dados de treino (bases de validação já era)
+ideb_dt_last_fit <- last_fit(
+  ideb_wf,
+  ideb_initial_split
+)
+
+# metricas
+#collect_metrics(ideb_dt_last_fit)
+teste <- collect_metrics(ideb_dt_last_fit)
+View(teste)
+
+# roc
+ideb_test_preds <- collect_predictions(ideb_dt_last_fit)
+ideb_roc_curve <- ideb_test_preds %>% roc_curve(cat_matematica, `.pred_0`)
+autoplot(ideb_roc_curve)
+
+# Variáveis importantes
+ideb_dt_last_fit_model <- ideb_dt_last_fit$.workflow[[1]]$fit$fit
+vip::vip(ideb_dt_last_fit_model)
+
+#Matriz de confusão
+ideb_test_preds %>% conf_mat(cat_matematica, .pred_class)
+
+# confusion matrix se mudar o criterio
+ideb_test_preds %>%
+  mutate(
+    cat_matematica_class = factor(if_else(`.pred_0` > 0.6, "0", "1"))
+  ) %>%
+  conf_mat(cat_matematica, cat_matematica_class)
+
+
+# PASSO 9: MODELO FINAL ------------------------------------------------------------
+ideb_modelo_final <- ideb_wf %>% fit(ideb)
+
+# PASSO 8: ESCORA BASE DE VALIDACAO ------------------------------------------------
+# adult_val <- read_rds("adult_val.rds")
+# 
+# adult_val_sumbissao <- adult_val %>%
+#   mutate(
+#     more_than_50k = predict(adult_modelo_final, new_data = adult_val, type = "prob")$`.pred_>50K`
+#   ) %>%
+#   select(id, more_than_50k)
+# 
+# write_csv(adult_val_sumbissao, "adult_val_sumbissao_arvoredecisao.csv")
+
+
+```
+

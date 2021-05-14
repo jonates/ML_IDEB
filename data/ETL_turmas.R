@@ -8,7 +8,8 @@ vetor_atributos_turmas <- c(
 'NU_ANO_CENSO',
 'ID_TURMA',
 'QT_MATRICULAS',
-'CO_ENTIDADE'
+'CO_ENTIDADE',
+'TP_DEPENDENCIA'
 )
 
 # carregando o dataset
